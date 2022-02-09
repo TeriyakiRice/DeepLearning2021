@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+# Solved in team:
+# a507688b-17c7-11e8-9de3-00505601122b
+# bee39584-17d2-11e8-9de3-00505601122b
+# 1af6e984-1812-11e8-9de3-00505601122b
+import argparse
+import os
+
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")  # Report only TF errors by default
+
+import numpy as np
+import tensorflow as tf
+
+from mnist import MNIST
+
+parser = argparse.ArgumentParser()
+# These arguments will be set appropriately by ReCodEx, even if you change them.
+parser.add_argument("--examples", default=256, type=int, help="MNIST examples to use.")
+parser.add_argument("--iterations", default=100, type=int, help="Iterations of the power algorithm.")
+parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
+parser.add_argument("--seed", default=42, type=int, help="Random seed.")
+parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
+
+
+# If you add more arguments, ReCodEx will keep them with your default values.
+
+def main(args):
+    # Fix random seeds and threads
+    np.random.seed(args.seed)
+    tf.random.set_seed(args.seed)
+    tf.config.threading.set_inter_op_parallelism_threads(args.threads)
+    tf.config.threading.set_intra_op_parallelism_threads(args.threads)
+
+    # Load data
+    mnist = MNIST()
+    data_indices = np.random.choice(mnist.train.size, size=args.examples, replace=False)
+    data = tf.convert_to_tensor(mnist.train.data["images"][data_indices])
+    data = tf.reshape(data, [data.shape[0], data.shape[1] * data.shape[2] * data.shape[3]])
+
+    mean = tf.math.reduce_mean(data, axis=0)
+
+    cov = tf.transpose(data - mean) @ (data - mean) / data.shape[0]
+
+    total_variance = tf.math.reduce_sum(tf.linalg.diag_part(cov))
+
+    v = tf.ones(cov.shape[0])
+    for i in range(args.iterations):
+        # TODO: In the power iteration algorithm, we compute
+        v = tf.linalg.matvec(cov, v)
+        #    The matrix-vector multiplication can be computed using `tf.linalg.matvec`.
+        s = tf.linalg.norm(v)
+        #    The l2_norm can be computed using `tf.linalg.norm`.
+        v = v / s
+
+    explained_variance = s / total_variance
+
+    # Return the total and explained variance for ReCodEx to validate
+    return total_variance.numpy(), 100 * explained_variance.numpy()
+
+
+if __name__ == "__main__":
+    args = parser.parse_args([] if "__file__" not in globals() else None)
+    total_variance, explained_variance = main(args)
+    print("Total variance: {:.2f}".format(total_variance))
+    print("Explained variance: {:.2f}".format(explained_variance))
